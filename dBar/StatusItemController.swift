@@ -14,7 +14,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         super.init()
 
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "speaker.wave.2", accessibilityDescription: "dBar output level")
+            button.image = MenuBarIcon.make()
             button.target = self
             button.action = #selector(togglePopover(_:))
         }
