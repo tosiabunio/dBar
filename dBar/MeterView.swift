@@ -17,8 +17,8 @@ struct MeterView: View {
             }
 
             VStack(spacing: 6) {
-                ChannelRow(name: "L", channel: model.channels[0])
-                ChannelRow(name: "R", channel: model.channels[1])
+                ChannelRow(name: "L", channel: model.channels[0], resetPeaks: model.resetPeaks)
+                ChannelRow(name: "R", channel: model.channels[1], resetPeaks: model.resetPeaks)
                 ScaleRow()
             }
 
@@ -91,6 +91,7 @@ private enum Layout {
 private struct ChannelRow: View {
     let name: String
     let channel: LevelMeterModel.Channel
+    let resetPeaks: () -> Void
 
     var body: some View {
         HStack(spacing: Layout.spacing) {
@@ -109,13 +110,17 @@ private struct ChannelRow: View {
                 .foregroundStyle(channel.clipped ? .red : .primary)
                 .frame(width: Layout.readoutWidth, alignment: .trailing)
         }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: resetPeaks)
+        .help("Peak since last reset. Click to reset peaks.")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(name == "L" ? "Left channel" : "Right channel")
-        .accessibilityValue(readout + " decibels")
+        .accessibilityValue("Peak " + readout + " decibels")
+        .accessibilityAction(named: "Reset peaks", resetPeaks)
     }
 
     private var readout: String {
-        channel.peakHold > MeterScale.floor ? String(format: "%.1f", channel.peakHold) : "-∞"
+        channel.maxPeak > MeterScale.floor ? String(format: "%.1f", channel.maxPeak) : "-∞"
     }
 }
 

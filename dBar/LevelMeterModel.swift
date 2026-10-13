@@ -12,7 +12,9 @@ final class LevelMeterModel {
         var level = MeterScale.floor
         /// Highest recent level in dBFS, held briefly before falling back.
         var peakHold = MeterScale.floor
-        /// Latched once the signal reaches 0 dBFS; cleared by `resetClipIndicators()`.
+        /// Highest level in dBFS since the last `resetPeaks()`.
+        var maxPeak = MeterScale.floor
+        /// Latched once the signal reaches 0 dBFS; cleared by `resetClipIndicators()` or `resetPeaks()`.
         var clipped = false
         fileprivate var peakHoldTime: TimeInterval = 0
     }
@@ -61,6 +63,15 @@ final class LevelMeterModel {
         }
     }
 
+    /// Clears the peak hold, maximum peak and clip indicator of every channel.
+    func resetPeaks() {
+        for index in channels.indices {
+            channels[index].peakHold = MeterScale.floor
+            channels[index].maxPeak = MeterScale.floor
+            channels[index].clipped = false
+        }
+    }
+
     private func tick() {
         let now = CACurrentMediaTime()
         let release = Self.releaseRate * Float(now - lastTick)
@@ -78,6 +89,7 @@ final class LevelMeterModel {
             } else if now - channel.peakHoldTime > Self.peakHoldDuration {
                 channel.peakHold = max(channel.peakHold - release, channel.level)
             }
+            channel.maxPeak = max(channel.maxPeak, peak)
             if peaks[index] >= 1 {
                 channel.clipped = true
             }
