@@ -2,6 +2,8 @@
 
 A macOS menu bar app that shows a real-time stereo level meter for everything your Mac is playing.
 
+<p align="center"><img src="docs/screenshot.png" width="386" alt="dBar's meter panel: L and R peak meters between short-term and integrated loudness bars"></p>
+
 Click the dBar icon (two rows of level segments) in the menu bar to open the meter:
 
 - **L / R bars**: peak level in dBFS (IEC 60268-18 scale). Green is below −12 dB, yellow is −12 to −3 dB, red is above −3 dB.
