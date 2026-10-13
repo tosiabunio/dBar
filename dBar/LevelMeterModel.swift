@@ -23,13 +23,14 @@ final class LevelMeterModel {
     struct LoudnessReading: Equatable {
         /// Loudness of the last 3 s.
         var shortTerm = MeterScale.floor
-        /// Gated loudness since the meter opened or was reset.
+        /// Gated loudness since measuring started or was reset.
         var integrated = MeterScale.floor
     }
 
     private static let releaseRate: Float = 24 // dB per second
     private static let peakHoldDuration: TimeInterval = 1.5
     private static let refreshInterval: TimeInterval = 1.0 / 60
+    private static let backgroundRefreshInterval: TimeInterval = 0.1
 
     private(set) var channels = [Channel(), Channel()]
     private(set) var loudness = LoudnessReading()
@@ -40,10 +41,12 @@ final class LevelMeterModel {
     @ObservationIgnored private var loudnessMeter = LoudnessMeter()
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var lastTick: TimeInterval = 0
+    @ObservationIgnored private var isVisible = true
 
+    /// Starts capturing, or carries on if capture kept running while the meter was closed.
     func start() {
-        guard timer == nil else { return }
         outputDeviceName = try? AudioObjectID.defaultOutputDevice().readString(kAudioObjectPropertyName)
+        guard timer == nil else { return }
         do {
             try tap.start()
             errorMessage = nil
@@ -53,7 +56,23 @@ final class LevelMeterModel {
         }
 
         lastTick = CACurrentMediaTime()
-        let timer = Timer(timeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
+        scheduleTimer()
+    }
+
+    /// While the meter is hidden, refresh just often enough to keep up with the 100 ms
+    /// loudness blocks instead of at display rate.
+    func setVisible(_ visible: Bool) {
+        guard visible != isVisible else { return }
+        isVisible = visible
+        if timer != nil {
+            scheduleTimer()
+        }
+    }
+
+    private func scheduleTimer() {
+        timer?.invalidate()
+        let interval = isVisible ? Self.refreshInterval : Self.backgroundRefreshInterval
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
         RunLoop.main.add(timer, forMode: .common)

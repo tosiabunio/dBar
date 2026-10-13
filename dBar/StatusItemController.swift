@@ -2,7 +2,8 @@ import AppKit
 import SwiftUI
 
 /// Owns the menu bar icon and the meter popover. Audio is only captured while the popover is
-/// open, so the app costs nothing (and shows no recording indicator) the rest of the time.
+/// open, so the app costs nothing (and shows no recording indicator) the rest of the time,
+/// unless the user chose to keep measuring loudness while it's closed.
 @MainActor
 final class StatusItemController: NSObject, NSPopoverDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -37,10 +38,15 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     func popoverWillShow(_ notification: Notification) {
         launchAtLogin.refresh()
+        model.setVisible(true)
         model.start()
     }
 
     func popoverDidClose(_ notification: Notification) {
-        model.stop()
+        if Preferences.keepsMeasuringWhenClosed {
+            model.setVisible(false)
+        } else {
+            model.stop()
+        }
     }
 }

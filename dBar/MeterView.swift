@@ -4,7 +4,8 @@ import SwiftUI
 struct MeterView: View {
     let model: LevelMeterModel
     @Bindable var launchAtLogin: LaunchAtLogin
-    @AppStorage("showsLoudness") private var showsLoudness = false
+    @AppStorage(Preferences.showsLoudnessKey) private var showsLoudness = false
+    @AppStorage(Preferences.measuresInBackgroundKey) private var measuresInBackground = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -28,11 +29,17 @@ struct MeterView: View {
                 }
                 ScaleRow()
                 if showsLoudness {
-                    Text("LUFS: S short-term (3 s), I integrated. Target \(Int(Loudness.target)).")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("LUFS: S short-term (3 s), I integrated. Target \(Int(Loudness.target)).")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Toggle("Keep measuring when closed", isOn: $measuresInBackground)
+                            .toggleStyle(.checkbox)
+                            .controlSize(.small)
+                            .help("Integrated loudness keeps adding up while the meter is closed. macOS shows its recording indicator while dBar measures.")
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
 
@@ -149,7 +156,7 @@ private struct LoudnessRow: View {
         var label: String { self == .shortTerm ? "S" : "I" }
         var name: String { self == .shortTerm ? "Short-term loudness" : "Integrated loudness" }
         var detail: String {
-            self == .shortTerm ? "last 3 seconds" : "since the meter opened or was reset"
+            self == .shortTerm ? "last 3 seconds" : "since measuring started or was reset"
         }
     }
 
