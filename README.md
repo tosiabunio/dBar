@@ -37,3 +37,7 @@ The build is ad-hoc signed ("Sign to Run Locally"). macOS may ask for permission
 - Capture runs only while the popover is open, so the app uses no CPU and shows no recording indicator otherwise.
 
 The meter shows the digital signal apps send to the output, measured before the system volume control. Changing the volume slider does not move the bars.
+
+## License
+
+[BSD Zero Clause License (0BSD)](LICENSE). You can use, copy, modify and distribute dBar for any purpose, with or without credit.
