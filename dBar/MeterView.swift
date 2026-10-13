@@ -4,6 +4,7 @@ import SwiftUI
 struct MeterView: View {
     let model: LevelMeterModel
     @Bindable var launchAtLogin: LaunchAtLogin
+    @AppStorage("showsLoudness") private var showsLoudness = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -17,9 +18,22 @@ struct MeterView: View {
             }
 
             VStack(spacing: 6) {
+                if showsLoudness {
+                    LoudnessRow(kind: .shortTerm, value: model.loudness.shortTerm, reset: model.resetPeaks)
+                }
                 ChannelRow(name: "L", channel: model.channels[0], resetPeaks: model.resetPeaks)
                 ChannelRow(name: "R", channel: model.channels[1], resetPeaks: model.resetPeaks)
+                if showsLoudness {
+                    LoudnessRow(kind: .integrated, value: model.loudness.integrated, reset: model.resetPeaks)
+                }
                 ScaleRow()
+                if showsLoudness {
+                    Text("LUFS: S short-term (3 s), I integrated. Target \(Int(Loudness.target)).")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
 
             Divider()
@@ -50,7 +64,10 @@ struct MeterView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
+            HStack(spacing: 12) {
+                Toggle("Loudness", isOn: $showsLoudness)
+                    .toggleStyle(.checkbox)
+                    .help("Show short-term and integrated loudness (LUFS)")
                 Toggle("Launch at Login", isOn: $launchAtLogin.isEnabled)
                     .toggleStyle(.checkbox)
                 Spacer()
@@ -84,6 +101,8 @@ private enum Layout {
     static let clipIndicatorSize: CGFloat = 8
     static let readoutWidth: CGFloat = 40
     static let barHeight: CGFloat = 12
+    static let loudnessBarHeight: CGFloat = 5
+    static let loudnessRowHeight: CGFloat = 9
 }
 
 private struct ChannelRow: View {
@@ -110,7 +129,7 @@ private struct ChannelRow: View {
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: resetPeaks)
-        .help("Peak since last reset. Click to reset peaks.")
+        .help("Peak since last reset. Click to reset peaks and integrated loudness.")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(name == "L" ? "Left channel" : "Right channel")
         .accessibilityValue("Peak " + readout + " decibels")
@@ -119,6 +138,73 @@ private struct ChannelRow: View {
 
     private var readout: String {
         channel.maxPeak > MeterScale.floor ? String(format: "%.1f", channel.maxPeak) : "-∞"
+    }
+}
+
+/// A thin continuous loudness bar on the same scale as the peak bars, with a target marker.
+private struct LoudnessRow: View {
+    enum Kind {
+        case shortTerm, integrated
+
+        var label: String { self == .shortTerm ? "S" : "I" }
+        var name: String { self == .shortTerm ? "Short-term loudness" : "Integrated loudness" }
+        var detail: String {
+            self == .shortTerm ? "last 3 seconds" : "since the meter opened or was reset"
+        }
+    }
+
+    let kind: Kind
+    let value: Float
+    let reset: () -> Void
+
+    var body: some View {
+        HStack(spacing: Layout.spacing) {
+            Text(kind.label)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: Layout.labelWidth)
+            LoudnessBar(value: value)
+                .frame(height: Layout.loudnessBarHeight)
+            Color.clear
+                .frame(width: Layout.clipIndicatorSize, height: 1)
+            Text(readout)
+                .font(.caption2.monospacedDigit())
+                .frame(width: Layout.readoutWidth, alignment: .trailing)
+        }
+        .frame(height: Layout.loudnessRowHeight)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: reset)
+        .help("\(kind.name) (\(kind.detail)) in LUFS. Target \(Int(Loudness.target)) LUFS. Click to reset peaks and integrated loudness.")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(kind.name)
+        .accessibilityValue(readout + " LUFS")
+        .accessibilityAction(named: "Reset peaks and integrated loudness", reset)
+    }
+
+    private var readout: String {
+        value > MeterScale.floor ? String(format: "%.1f", value) : "-∞"
+    }
+}
+
+private struct LoudnessBar: View {
+    let value: Float
+
+    var body: some View {
+        Canvas { context, size in
+            let track = Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: size.height / 2)
+            context.fill(track, with: .color(Color.secondary.opacity(0.18)))
+
+            let valueX = MeterScale.position(for: value) * size.width
+            let targetX = MeterScale.position(for: Loudness.target) * size.width
+            var fill = context
+            fill.clip(to: track)
+            fill.fill(Path(CGRect(x: 0, y: 0, width: min(valueX, targetX), height: size.height)), with: .color(.teal))
+            if valueX > targetX {
+                fill.fill(Path(CGRect(x: targetX, y: 0, width: valueX - targetX, height: size.height)), with: .color(.orange))
+            }
+
+            context.fill(Path(CGRect(x: targetX - 0.75, y: 0, width: 1.5, height: size.height)), with: .color(.primary))
+        }
     }
 }
 

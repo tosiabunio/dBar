@@ -19,15 +19,25 @@ final class LevelMeterModel {
         fileprivate var peakHoldTime: TimeInterval = 0
     }
 
+    /// BS.1770 loudness of the stereo mix, in LUFS (`MeterScale.floor` when silent).
+    struct LoudnessReading: Equatable {
+        /// Loudness of the last 3 s.
+        var shortTerm = MeterScale.floor
+        /// Gated loudness since the meter opened or was reset.
+        var integrated = MeterScale.floor
+    }
+
     private static let releaseRate: Float = 24 // dB per second
     private static let peakHoldDuration: TimeInterval = 1.5
     private static let refreshInterval: TimeInterval = 1.0 / 60
 
     private(set) var channels = [Channel(), Channel()]
+    private(set) var loudness = LoudnessReading()
     private(set) var outputDeviceName: String?
     private(set) var errorMessage: String?
 
     @ObservationIgnored private let tap = SystemAudioTap()
+    @ObservationIgnored private var loudnessMeter = LoudnessMeter()
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var lastTick: TimeInterval = 0
 
@@ -55,15 +65,20 @@ final class LevelMeterModel {
         timer = nil
         tap.stop()
         channels = [Channel(), Channel()]
+        loudnessMeter = LoudnessMeter()
+        loudness = LoudnessReading()
     }
 
-    /// Clears the peak hold, maximum peak and clip indicator of every channel.
+    /// Clears the peak hold, maximum peak and clip indicator of every channel, and starts
+    /// integrated loudness over.
     func resetPeaks() {
         for index in channels.indices {
             channels[index].peakHold = MeterScale.floor
             channels[index].maxPeak = MeterScale.floor
             channels[index].clipped = false
         }
+        loudnessMeter.resetIntegrated()
+        loudness.integrated = MeterScale.floor
     }
 
     private func tick() {
@@ -92,6 +107,20 @@ final class LevelMeterModel {
         // Skip the assignment when nothing moved so a silent meter doesn't redraw 60 times a second.
         if updated != channels {
             channels = updated
+        }
+
+        // Loudness only changes when a 100 ms block completes.
+        let blocks = tap.drainLoudnessBlocks()
+        guard !blocks.isEmpty else { return }
+        for blockPower in blocks {
+            loudnessMeter.add(blockPower: blockPower)
+        }
+        let reading = LoudnessReading(
+            shortTerm: max(loudnessMeter.shortTerm, MeterScale.floor),
+            integrated: max(loudnessMeter.integrated, MeterScale.floor)
+        )
+        if reading != loudness {
+            loudness = reading
         }
     }
 }

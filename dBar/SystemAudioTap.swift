@@ -3,25 +3,26 @@ import CoreAudio
 import os
 
 /// Captures the stereo mix of everything the Mac is playing using a Core Audio process tap
-/// (macOS 14.2+) and reports per-channel peak amplitude.
+/// (macOS 14.2+) and reports per-channel peak amplitude and loudness.
 ///
-/// The tap feeds a private aggregate device whose IO callback measures each buffer and
-/// folds the result into a `PeakAccumulator`, which the UI drains at display rate.
+/// The tap feeds a private aggregate device whose IO callback measures each buffer into a
+/// `PeakAccumulator` and a `LoudnessAnalyzer`, which the UI drains at display rate.
 final class SystemAudioTap {
     private let accumulator = PeakAccumulator()
     private let ioQueue = DispatchQueue(label: "dBar.SystemAudioTap", qos: .userInteractive)
     private var tapID = AudioObjectID.unknown
     private var aggregateDeviceID = AudioObjectID.unknown
     private var ioProcID: AudioDeviceIOProcID?
+    private var loudness: LoudnessAnalyzer?
 
     var isRunning: Bool { ioProcID != nil }
 
     func start() throws {
         guard !isRunning else { return }
         do {
-            let tapUID = try createTap()
-            try createAggregateDevice(tapUID: tapUID)
-            try startIO()
+            let tap = try createTap()
+            try createAggregateDevice(tapUID: tap.uid)
+            try startIO(sampleRate: tap.sampleRate)
         } catch {
             stop()
             throw error
@@ -43,11 +44,17 @@ final class SystemAudioTap {
             tapID = .unknown
         }
         _ = accumulator.drain()
+        loudness = nil
     }
 
     /// Highest absolute sample value per channel (0 = silence, 1 = 0 dBFS) since the previous call.
     func drainPeaks() -> SIMD2<Float> {
         accumulator.drain()
+    }
+
+    /// K-weighted power of each 100 ms block completed since the previous call, for `LoudnessMeter`.
+    func drainLoudnessBlocks() -> [Double] {
+        loudness?.drainBlocks() ?? []
     }
 
     /// Per-app volume mixers that tap other apps' audio, mute it, and play their own processed
@@ -64,7 +71,8 @@ final class SystemAudioTap {
         }
     }
 
-    private func createTap() throws -> String {
+    /// Returns the tap's UID and sample rate.
+    private func createTap() throws -> (uid: String, sampleRate: Double) {
         let description = CATapDescription(stereoGlobalTapButExcludeProcesses: Self.replayingProcesses())
         description.name = "dBar Output Meter"
         description.isPrivate = true
@@ -77,7 +85,7 @@ final class SystemAudioTap {
         else {
             throw CoreAudioError(operation: "Reading the tap format", status: kAudioDeviceUnsupportedFormatError)
         }
-        return description.uuid.uuidString
+        return (description.uuid.uuidString, format.mSampleRate)
     }
 
     /// The aggregate device contains only the tap, so its input streams are exactly the tapped mix.
@@ -98,38 +106,64 @@ final class SystemAudioTap {
             .check("Creating the capture device")
     }
 
-    private func startIO() throws {
+    private func startIO(sampleRate: Double) throws {
         let accumulator = self.accumulator
+        let loudness = LoudnessAnalyzer(sampleRate: sampleRate)
+        self.loudness = loudness
         try AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateDeviceID, ioQueue) { _, inputData, _, _, _ in
-            accumulator.record(Self.peaks(in: inputData))
+            // Runs on the audio IO thread: nothing here may allocate or block.
+            guard let samples = StereoSamples(inputData) else { return }
+            accumulator.record(samples.peaks())
+            loudness.process(
+                left: samples.left, leftStride: samples.leftStride,
+                right: samples.right, rightStride: samples.rightStride,
+                frameCount: samples.frameCount
+            )
         }
         .check("Creating the audio callback")
         try AudioDeviceStart(aggregateDeviceID, ioProcID).check("Starting audio capture")
     }
+}
 
-    /// Runs on the audio IO thread: must not allocate or block.
-    private static func peaks(in bufferList: UnsafePointer<AudioBufferList>) -> SIMD2<Float> {
-        var peaks = SIMD2<Float>.zero
-        var channel = 0
+/// The first two channels of an IO buffer list, whether interleaved (one buffer, stride 2) or
+/// planar (one buffer per channel). A mono buffer list is read as both channels.
+private struct StereoSamples {
+    let left: UnsafePointer<Float>
+    let leftStride: Int
+    let right: UnsafePointer<Float>
+    let rightStride: Int
+    let frameCount: Int
+
+    init?(_ bufferList: UnsafePointer<AudioBufferList>) {
+        var left: (samples: UnsafePointer<Float>, stride: Int)?
+        var right: (samples: UnsafePointer<Float>, stride: Int)?
+        var frameCount = Int.max
         for buffer in UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: bufferList)) {
-            let channelsInBuffer = Int(buffer.mNumberChannels)
-            guard channelsInBuffer > 0, let data = buffer.mData else { continue }
-            let samples = data.assumingMemoryBound(to: Float.self)
-            let frameCount = Int(buffer.mDataByteSize) / MemoryLayout<Float>.stride / channelsInBuffer
-            if frameCount > 0 {
-                // Interleaved buffers hold several channels; stride over them one channel at a time.
-                for offset in 0..<channelsInBuffer where channel + offset < 2 {
-                    var peak: Float = 0
-                    vDSP_maxmgv(samples + offset, vDSP_Stride(channelsInBuffer), &peak, vDSP_Length(frameCount))
-                    peaks[channel + offset] = peak
+            let channels = Int(buffer.mNumberChannels)
+            guard right == nil, channels > 0, let data = buffer.mData else { continue }
+            let samples = UnsafePointer(data.assumingMemoryBound(to: Float.self))
+            frameCount = min(frameCount, Int(buffer.mDataByteSize) / MemoryLayout<Float>.stride / channels)
+            for offset in 0..<channels where right == nil {
+                if left == nil {
+                    left = (samples + offset, channels)
+                } else {
+                    right = (samples + offset, channels)
                 }
             }
-            channel += channelsInBuffer
         }
-        if channel == 1 {
-            peaks[1] = peaks[0]
-        }
-        return peaks
+        guard let left, frameCount > 0, frameCount != .max else { return nil }
+        let second = right ?? left
+        (self.left, leftStride, self.right, rightStride) = (left.samples, left.stride, second.samples, second.stride)
+        self.frameCount = frameCount
+    }
+
+    /// Highest absolute sample value of each channel.
+    func peaks() -> SIMD2<Float> {
+        var leftPeak: Float = 0
+        var rightPeak: Float = 0
+        vDSP_maxmgv(left, vDSP_Stride(leftStride), &leftPeak, vDSP_Length(frameCount))
+        vDSP_maxmgv(right, vDSP_Stride(rightStride), &rightPeak, vDSP_Length(frameCount))
+        return SIMD2(leftPeak, rightPeak)
     }
 }
 
