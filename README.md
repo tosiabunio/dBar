@@ -2,7 +2,7 @@
 
 A macOS menu bar app that shows a real-time stereo level meter for everything your Mac is playing.
 
-Click the speaker icon in the menu bar to open the meter:
+Click the dBar icon (two rows of level segments) in the menu bar to open the meter:
 
 - **L / R bars**: peak level in dBFS (IEC 60268-18 scale). Green is below −12 dB, yellow is −12 to −3 dB, red is above −3 dB.
 - **Peak hold**: a single lit segment marks the recent peak and falls back on its own. The number on the right is the highest peak since the last reset, in dB.
@@ -10,14 +10,20 @@ Click the speaker icon in the menu bar to open the meter:
 - **Reset**: click either meter row to reset the peaks and clip indicators of both channels.
 - **Launch at Login**: starts dBar when you log in. It uses `SMAppService`, so it appears under System Settings › General › Login Items. Turn it on from the copy of the app you'll keep using, ideally one in `/Applications`.
 
-## Requirements
+## Download
 
-- macOS 14.2 or later (uses Core Audio process taps)
-- Xcode 16 or later
+Get the latest version from [Releases](https://github.com/tosiabunio/dBar/releases/latest). dBar needs macOS 14.2 or later and runs on Apple silicon and Intel Macs.
 
-## Build and run
+Releases aren't notarized by Apple, so macOS blocks dBar the first time you open it:
 
-Open `dBar.xcodeproj` and press Run, or build from the terminal:
+1. Download the `.zip`, unzip it, and move **dBar.app** to Applications.
+2. Open dBar. When macOS says it can't verify the app, click **Done**.
+3. In **System Settings › Privacy & Security**, scroll down to the message about dBar and click **Open Anyway**, then confirm.
+4. Click the dBar icon in the menu bar. When macOS asks, allow dBar to capture system audio.
+
+## Build from source
+
+You need Xcode 26 or later (the app icon is an Icon Composer file). Open `dBar.xcodeproj` and press Run, or build from the terminal:
 
 ```sh
 xcodebuild -project dBar.xcodeproj -target dBar -configuration Release build SYMROOT=$PWD/build
@@ -33,7 +39,7 @@ The build is ad-hoc signed ("Sign to Run Locally"). macOS may ask for permission
 
 ## How it works
 
-- `SystemAudioTap` creates a global stereo-mixdown process tap (`CATapDescription(stereoGlobalTapButExcludeProcesses: [])`) and wraps it in a private aggregate device. The aggregate's IO callback measures per-channel peaks with vDSP.
+- `SystemAudioTap` creates a global stereo-mixdown process tap (`CATapDescription(stereoGlobalTapButExcludeProcesses:)`) and wraps it in a private aggregate device. The aggregate's IO callback measures per-channel peaks with vDSP.
 - `LevelMeterModel` drains those peaks 60 times a second and applies meter ballistics: instant attack, 24 dB/s release, 1.5 s peak hold.
 - Per-app volume mixers that play other apps' audio back themselves (currently FineTune) are left out of the tap. Otherwise that audio would be counted twice and read about 6 dB too high.
 - Capture runs only while the popover is open, so the app uses no CPU and shows no recording indicator otherwise.
