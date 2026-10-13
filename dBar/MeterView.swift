@@ -54,8 +54,6 @@ struct MeterView: View {
                 Toggle("Launch at Login", isOn: $launchAtLogin.isEnabled)
                     .toggleStyle(.checkbox)
                 Spacer()
-                Button("Reset Clip") { model.resetClipIndicators() }
-                    .disabled(!model.channels.contains(where: \.clipped))
                 Button("Quit dBar") { NSApp.terminate(nil) }
             }
 

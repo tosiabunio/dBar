@@ -5,8 +5,9 @@ A macOS menu bar app that shows a real-time stereo level meter for everything yo
 Click the speaker icon in the menu bar to open the meter:
 
 - **L / R bars**: peak level in dBFS (IEC 60268-18 scale). Green is below −12 dB, yellow is −12 to −3 dB, red is above −3 dB.
-- **Peak hold**: a single lit segment marks the recent peak. The number on the right is that value in dB.
-- **Clip indicator**: latches red when a channel reaches 0 dBFS. **Reset Clip** clears it.
+- **Peak hold**: a single lit segment marks the recent peak and falls back on its own. The number on the right is the highest peak since the last reset, in dB.
+- **Clip indicator**: latches red when a channel reaches 0 dBFS.
+- **Reset**: click either meter row to reset the peaks and clip indicators of both channels.
 - **Launch at Login**: starts dBar when you log in. It uses `SMAppService`, so it appears under System Settings › General › Login Items. Turn it on from the copy of the app you'll keep using, ideally one in `/Applications`.
 
 ## Requirements

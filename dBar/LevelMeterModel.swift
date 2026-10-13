@@ -14,7 +14,7 @@ final class LevelMeterModel {
         var peakHold = MeterScale.floor
         /// Highest level in dBFS since the last `resetPeaks()`.
         var maxPeak = MeterScale.floor
-        /// Latched once the signal reaches 0 dBFS; cleared by `resetClipIndicators()` or `resetPeaks()`.
+        /// Latched once the signal reaches 0 dBFS; cleared by `resetPeaks()`.
         var clipped = false
         fileprivate var peakHoldTime: TimeInterval = 0
     }
@@ -55,12 +55,6 @@ final class LevelMeterModel {
         timer = nil
         tap.stop()
         channels = [Channel(), Channel()]
-    }
-
-    func resetClipIndicators() {
-        for index in channels.indices {
-            channels[index].clipped = false
-        }
     }
 
     /// Clears the peak hold, maximum peak and clip indicator of every channel.
