@@ -40,6 +40,16 @@ extension AudioObjectID {
         return value
     }
 
+    func readObjectList(_ selector: AudioObjectPropertySelector) throws -> [AudioObjectID] {
+        var address = Self.address(selector)
+        var size: UInt32 = 0
+        let operation = "Reading audio property \(OSStatus(bitPattern: selector).fourCharDescription)"
+        try AudioObjectGetPropertyDataSize(self, &address, 0, nil, &size).check(operation)
+        var objects = [AudioObjectID](repeating: .unknown, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        try AudioObjectGetPropertyData(self, &address, 0, nil, &size, &objects).check(operation)
+        return Array(objects.prefix(Int(size) / MemoryLayout<AudioObjectID>.size))
+    }
+
     func readString(_ selector: AudioObjectPropertySelector) throws -> String {
         var address = Self.address(selector)
         var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)

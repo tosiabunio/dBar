@@ -50,8 +50,22 @@ final class SystemAudioTap {
         accumulator.drain()
     }
 
+    /// Per-app volume mixers that tap other apps' audio, mute it, and play their own processed
+    /// copy. A global tap hears both the original and the copy, so these are left out.
+    private static let replayingAppBundleIDs: Set<String> = [
+        "com.finetuneapp.FineTune",
+    ]
+
+    private static func replayingProcesses() -> [AudioObjectID] {
+        let processes = (try? AudioObjectID.system.readObjectList(kAudioHardwarePropertyProcessObjectList)) ?? []
+        return processes.filter { process in
+            guard let bundleID = try? process.readString(kAudioProcessPropertyBundleID) else { return false }
+            return replayingAppBundleIDs.contains(bundleID)
+        }
+    }
+
     private func createTap() throws -> String {
-        let description = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
+        let description = CATapDescription(stereoGlobalTapButExcludeProcesses: Self.replayingProcesses())
         description.name = "dBar Output Meter"
         description.isPrivate = true
         try AudioHardwareCreateProcessTap(description, &tapID).check("Creating the system audio tap")
