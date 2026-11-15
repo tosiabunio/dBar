@@ -1,6 +1,6 @@
 # dBar
 
-A macOS menu bar app that shows a real-time stereo level meter for everything your Mac is playing.
+A macOS menu bar app that shows a real-time stereo level meter for everything your Mac is playing. Its Windows 11 counterpart is [dBTray](https://github.com/tosiabunio/dBTray), which lives in the notification area.
 
 <p align="center"><img src="docs/screenshot.png" width="386" alt="dBar's meter panel: L and R peak meters between short-term and integrated loudness bars"></p>
 
