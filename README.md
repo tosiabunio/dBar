@@ -45,7 +45,7 @@ The build is ad-hoc signed ("Sign to Run Locally"). macOS may ask for permission
 - `SystemAudioTap` creates a global stereo-mixdown process tap (`CATapDescription(stereoGlobalTapButExcludeProcesses:)`) and wraps it in a private aggregate device. The aggregate's IO callback measures per-channel peaks with vDSP.
 - `LevelMeterModel` drains those peaks 60 times a second and applies meter ballistics: instant attack, 24 dB/s release, 1.5 s peak hold.
 - `LoudnessAnalyzer` applies BS.1770 K-weighting on the IO thread and emits 100 ms blocks of power. `LoudnessMeter` turns them into short-term loudness and gated integrated loudness (−70 LUFS absolute gate, −10 LU relative gate). It matches the EBU Tech 3341 reference cases within 0.1 LU.
-- Per-app volume mixers that play other apps' audio back themselves (currently FineTune) are left out of the tap. Otherwise that audio would be counted twice and read about 6 dB too high.
+- Apps that play other apps' audio back themselves (currently FineTune and the ForceStereo helper) are left out of the tap. Otherwise that audio would be counted twice and read about 6 dB too high.
 - Capture runs only while the popover is open, so the app uses no CPU and shows no recording indicator otherwise. The exception is *Keep measuring when closed*: capture then carries on after the popover closes (from the first time you open it), refreshing 10 times a second instead of 60.
 
 The meter shows the digital signal apps send to the output, measured before the system volume control. Changing the volume slider does not move the bars.

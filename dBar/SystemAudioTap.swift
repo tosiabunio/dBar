@@ -63,12 +63,31 @@ final class SystemAudioTap {
         "com.finetuneapp.FineTune",
     ]
 
+    /// Background helpers that do the same but have no bundle ID, matched by executable name.
+    /// ForceStereo's helper replays its virtual device's audio on the real interface.
+    private static let replayingExecutableNames: Set<String> = [
+        "forcestereo",
+    ]
+
     private static func replayingProcesses() -> [AudioObjectID] {
         let processes = (try? AudioObjectID.system.readObjectList(kAudioHardwarePropertyProcessObjectList)) ?? []
         return processes.filter { process in
-            guard let bundleID = try? process.readString(kAudioProcessPropertyBundleID) else { return false }
-            return replayingAppBundleIDs.contains(bundleID)
+            if let bundleID = try? process.readString(kAudioProcessPropertyBundleID),
+               replayingAppBundleIDs.contains(bundleID) {
+                return true
+            }
+            guard let pid = try? process.read(kAudioProcessPropertyPID, defaultValue: pid_t(0)),
+                  let name = executableName(of: pid)
+            else { return false }
+            return replayingExecutableNames.contains(name)
         }
+    }
+
+    private static func executableName(of pid: pid_t) -> String? {
+        var path = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
+        guard proc_pidpath(pid, &path, UInt32(path.count)) > 0 else { return nil }
+        let bytes = path.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
+        return URL(fileURLWithPath: String(decoding: bytes, as: UTF8.self)).lastPathComponent
     }
 
     /// Returns the tap's UID and sample rate.
