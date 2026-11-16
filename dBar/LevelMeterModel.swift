@@ -34,8 +34,26 @@ final class LevelMeterModel {
 
     private(set) var channels = [Channel(), Channel()]
     private(set) var loudness = LoudnessReading()
-    private(set) var outputDeviceName: String?
     private(set) var errorMessage: String?
+
+    struct OutputDevice: Identifiable, Hashable {
+        let uid: String
+        let name: String
+        var id: String { uid }
+    }
+
+    /// Connected output devices the user can measure at.
+    private(set) var outputDevices: [OutputDevice] = []
+    /// UID of the device to measure at, or nil to measure the mix of all apps.
+    private(set) var sourceDeviceUID = UserDefaults.standard.string(forKey: Preferences.sourceDeviceUIDKey)
+    /// Name of the chosen device, kept so it can still be shown while it's disconnected.
+    private(set) var sourceDeviceName = UserDefaults.standard.string(forKey: Preferences.sourceDeviceNameKey)
+
+    /// The chosen device isn't connected, so the meter is measuring all apps instead.
+    var sourceDeviceIsMissing: Bool {
+        guard let sourceDeviceUID else { return false }
+        return !outputDevices.contains { $0.uid == sourceDeviceUID }
+    }
 
     @ObservationIgnored private let tap = SystemAudioTap()
     @ObservationIgnored private var loudnessMeter = LoudnessMeter()
@@ -45,18 +63,45 @@ final class LevelMeterModel {
 
     /// Starts capturing, or carries on if capture kept running while the meter was closed.
     func start() {
-        outputDeviceName = try? AudioObjectID.defaultOutputDevice().readString(kAudioObjectPropertyName)
+        refreshOutputDevices()
         guard timer == nil else { return }
-        do {
-            try tap.start()
-            errorMessage = nil
-        } catch {
-            errorMessage = error.localizedDescription
-            return
-        }
-
+        guard startTap() else { return }
         lastTick = CACurrentMediaTime()
         scheduleTimer()
+    }
+
+    /// Chooses where to measure: at one output device, or nil for the mix of all apps.
+    func selectSource(_ uid: String?) {
+        guard uid != sourceDeviceUID else { return }
+        sourceDeviceUID = uid
+        sourceDeviceName = outputDevices.first { $0.uid == uid }?.name
+        UserDefaults.standard.set(sourceDeviceUID, forKey: Preferences.sourceDeviceUIDKey)
+        UserDefaults.standard.set(sourceDeviceName, forKey: Preferences.sourceDeviceNameKey)
+
+        guard timer != nil || errorMessage != nil else { return }
+        // Readings from the old source don't carry over to the new one.
+        stop()
+        start()
+    }
+
+    private func startTap() -> Bool {
+        do {
+            try tap.start(deviceUID: sourceDeviceIsMissing ? nil : sourceDeviceUID)
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    private func refreshOutputDevices() {
+        outputDevices = AudioObjectID.outputDevices().compactMap { device in
+            guard let uid = try? device.readString(kAudioDevicePropertyDeviceUID),
+                  let name = try? device.readString(kAudioObjectPropertyName)
+            else { return nil }
+            return OutputDevice(uid: uid, name: name)
+        }
     }
 
     /// While the meter is hidden, refresh just often enough to keep up with the 100 ms

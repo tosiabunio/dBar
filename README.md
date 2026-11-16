@@ -10,6 +10,7 @@ Click the dBar icon (two rows of level segments) in the menu bar to open the met
 - **Peak hold**: a single lit segment marks the recent peak and falls back on its own. The number on the right is the highest peak since the last reset, in dB.
 - **Clip indicator**: latches red when a channel reaches 0 dBFS.
 - **Loudness** (optional, turn on with the *Loudness* checkbox): short-term (S, last 3 s) and integrated (I) loudness in LUFS, measured per ITU-R BS.1770, as thin bars above and below the peak bars. A marker shows the −14 LUFS target most streaming services normalize to, and the bar turns orange past it. Tick *Keep measuring when closed* to let integrated loudness keep adding up after you close the meter; macOS then shows its recording indicator until you quit dBar or turn the option off.
+- **Measuring point**: the menu in the panel's header chooses what to measure. *All apps* is the mix of everything apps play. Choosing an output device measures the audio reaching that device instead, after any app that passes it along, such as a per-app volume mixer or a virtual device's helper. On a device with more than two channels, the meter reads the first two.
 - **Reset**: click any meter row to reset the peaks and clip indicators of both channels and start integrated loudness over.
 - **Launch at Login**: starts dBar when you log in. It uses `SMAppService`, so it appears under System Settings › General › Login Items. Turn it on from the copy of the app you'll keep using, ideally one in `/Applications`.
 
@@ -45,7 +46,8 @@ The build is ad-hoc signed ("Sign to Run Locally"). macOS may ask for permission
 - `SystemAudioTap` creates a global stereo-mixdown process tap (`CATapDescription(stereoGlobalTapButExcludeProcesses:)`) and wraps it in a private aggregate device. The aggregate's IO callback measures per-channel peaks with vDSP.
 - `LevelMeterModel` drains those peaks 60 times a second and applies meter ballistics: instant attack, 24 dB/s release, 1.5 s peak hold.
 - `LoudnessAnalyzer` applies BS.1770 K-weighting on the IO thread and emits 100 ms blocks of power. `LoudnessMeter` turns them into short-term loudness and gated integrated loudness (−70 LUFS absolute gate, −10 LU relative gate). It matches the EBU Tech 3341 reference cases within 0.1 LU.
-- Apps that play other apps' audio back themselves (currently FineTune and the ForceStereo helper) are left out of the tap. Otherwise that audio would be counted twice and read about 6 dB too high.
+- When an output device is chosen, the tap is a device tap (`CATapDescription(excludingProcesses:deviceUID:stream:)`) on the device's first output stream, with nothing excluded.
+- In *All apps* mode, apps that play other apps' audio back themselves (currently FineTune and the ForceStereo helper) are left out of the tap. Otherwise that audio would be counted twice and read about 6 dB too high.
 - Capture runs only while the popover is open, so the app uses no CPU and shows no recording indicator otherwise. The exception is *Keep measuring when closed*: capture then carries on after the popover closes (from the first time you open it), refreshing 10 times a second instead of 60.
 
 The meter shows the digital signal apps send to the output, measured before the system volume control. Changing the volume slider does not move the bars.

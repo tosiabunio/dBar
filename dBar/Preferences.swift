@@ -5,6 +5,8 @@ import Foundation
 enum Preferences {
     static let showsLoudnessKey = "showsLoudness"
     static let measuresInBackgroundKey = "measuresLoudnessInBackground"
+    static let sourceDeviceUIDKey = "sourceDeviceUID"
+    static let sourceDeviceNameKey = "sourceDeviceName"
 
     /// Capture keeps running after the meter closes, so integrated loudness keeps accumulating.
     /// Only applies while loudness is shown.

@@ -18,6 +18,13 @@ struct MeterView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            if model.sourceDeviceIsMissing {
+                Text("\(model.sourceDeviceName ?? "The chosen device") isn't connected. Measuring all apps.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             VStack(spacing: 6) {
                 if showsLoudness {
                     LoudnessRow(kind: .shortTerm, value: model.loudness.shortTerm, reset: model.resetPeaks)
@@ -59,15 +66,34 @@ struct MeterView: View {
             Text("Output Level")
                 .font(.headline)
             Spacer(minLength: 12)
-            if let outputDeviceName = model.outputDeviceName {
-                Text(outputDeviceName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
+            sourcePicker
         }
     }
+
+    /// Where to measure: the mix of all apps, or the audio reaching one output device.
+    private var sourcePicker: some View {
+        let selection = Binding(
+            get: { model.sourceDeviceUID ?? Self.allAppsTag },
+            set: { model.selectSource($0 == Self.allAppsTag ? nil : $0) }
+        )
+        return Picker("Measure", selection: selection) {
+            Text("All apps").tag(Self.allAppsTag)
+            Divider()
+            ForEach(model.outputDevices) { device in
+                Text(device.name).tag(device.uid)
+            }
+            if model.sourceDeviceIsMissing, let uid = model.sourceDeviceUID {
+                Text("\(model.sourceDeviceName ?? "Device") (not connected)").tag(uid)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .controlSize(.small)
+        .fixedSize()
+        .help("What to measure: everything apps play, or the audio reaching one output device, after any apps that pass it along.")
+    }
+
+    private static let allAppsTag = ""
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 6) {

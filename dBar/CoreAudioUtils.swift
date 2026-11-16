@@ -27,8 +27,13 @@ extension AudioObjectID {
     static let unknown = AudioObjectID(kAudioObjectUnknown)
     static let system = AudioObjectID(kAudioObjectSystemObject)
 
-    static func defaultOutputDevice() throws -> AudioDeviceID {
-        try system.read(kAudioHardwarePropertyDefaultOutputDevice, defaultValue: AudioDeviceID.unknown)
+    /// Devices that have at least one output stream.
+    static func outputDevices() -> [AudioDeviceID] {
+        let devices = (try? system.readObjectList(kAudioHardwarePropertyDevices)) ?? []
+        return devices.filter { device in
+            let streams = try? device.readObjectList(kAudioDevicePropertyStreams, scope: kAudioObjectPropertyScopeOutput)
+            return streams?.isEmpty == false
+        }
     }
 
     func read<Value: BitwiseCopyable>(_ selector: AudioObjectPropertySelector, defaultValue: Value) throws -> Value {
@@ -40,8 +45,12 @@ extension AudioObjectID {
         return value
     }
 
-    func readObjectList(_ selector: AudioObjectPropertySelector) throws -> [AudioObjectID] {
+    func readObjectList(
+        _ selector: AudioObjectPropertySelector,
+        scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal
+    ) throws -> [AudioObjectID] {
         var address = Self.address(selector)
+        address.mScope = scope
         var size: UInt32 = 0
         let operation = "Reading audio property \(OSStatus(bitPattern: selector).fourCharDescription)"
         try AudioObjectGetPropertyDataSize(self, &address, 0, nil, &size).check(operation)

@@ -17,10 +17,12 @@ final class SystemAudioTap {
 
     var isRunning: Bool { ioProcID != nil }
 
-    func start() throws {
+    /// Measures the mix of every app, or with a `deviceUID` only the audio headed for that
+    /// output device, whichever apps or helpers it passed through on the way.
+    func start(deviceUID: String? = nil) throws {
         guard !isRunning else { return }
         do {
-            let tap = try createTap()
+            let tap = try createTap(deviceUID: deviceUID)
             try createAggregateDevice(tapUID: tap.uid)
             try startIO(sampleRate: tap.sampleRate)
         } catch {
@@ -91,8 +93,16 @@ final class SystemAudioTap {
     }
 
     /// Returns the tap's UID and sample rate.
-    private func createTap() throws -> (uid: String, sampleRate: Double) {
-        let description = CATapDescription(stereoGlobalTapButExcludeProcesses: Self.replayingProcesses())
+    private func createTap(deviceUID: String?) throws -> (uid: String, sampleRate: Double) {
+        let description: CATapDescription
+        if let deviceUID {
+            // Everything playing to the device's first output stream. Nothing is excluded: a
+            // replaying app's output is exactly what reaches the device. The tap has the
+            // stream's channel count, and the meter reads its first two channels.
+            description = CATapDescription(excludingProcesses: [], deviceUID: deviceUID, stream: 0)
+        } else {
+            description = CATapDescription(stereoGlobalTapButExcludeProcesses: Self.replayingProcesses())
+        }
         description.name = "dBar Output Meter"
         description.isPrivate = true
         try AudioHardwareCreateProcessTap(description, &tapID).check("Creating the system audio tap")
